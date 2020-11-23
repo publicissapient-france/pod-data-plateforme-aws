@@ -1,0 +1,93 @@
+---
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'S3 bucket configuration Pod data-plateforme'
+
+###############################################################################
+### Metadata
+###############################################################################
+
+#Metadata:
+#  'AWS::CloudFormation::Interface':
+#    ParameterGroups:
+#      - Label:
+#          default: 'pod data-plateforme '
+
+
+###############################################################################
+### Parameters
+###############################################################################
+
+Parameters:
+  Environment:
+    Description: Environment
+    Default: prd
+    Type: String
+
+###############################################################################
+### Resources
+###############################################################################
+
+Resources:
+  Incoming:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub 'pod-dp-${Environment}-incoming'
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      Tags:
+        - Key: Description
+          Value: pod-dataplateform
+
+  Raw:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub 'pod-dp-${Environment}-raw'
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      Tags:
+        - Key: Description
+          Value: pod-dataplateform
+
+  Prepared:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub 'pod-dp-${Environment}-prepared'
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      Tags:
+        - Key: Description
+          Value: pod-dataplateform
+
+  Gold:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub 'pod-dp-${Environment}-gold'
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      Tags:
+        - Key: Description
+          Value: pod-dataplateform
+
+#  S3BucketPolicy:
+#    Type: AWS::S3::BucketPolicy
+#    Properties:
+#      Bucket: !Ref Incoming
+#      PolicyDocument:
+#        Statement:
+#          - Sid: PutObjectAccess
+#            Action:
+#              - s3:PutObject
+#            Effect: Allow
+#            Principal:
+#              AWS:
+#                - '123456789012' # Replace with a valid source AWS Account Id
+#            Resource:
+#              - !Sub "arn:aws:s3:::${BucketName}"

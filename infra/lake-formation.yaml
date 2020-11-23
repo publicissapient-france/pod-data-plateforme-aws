@@ -1,0 +1,49 @@
+---
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'S3 bucket configuration lake-formation'
+
+###############################################################################
+### Metadata
+###############################################################################
+
+Metadata:
+  'AWS::CloudFormation::Interface':
+    ParameterGroups:
+      - Label:
+          default: 'pod data-plateforme '
+
+
+###############################################################################
+### Parameters
+###############################################################################
+
+Parameters:
+  Env:
+    Description: Environment
+    Default: prd
+    Type: String
+
+  Adminrole:
+    Description: adminrole arn
+    Default: role
+    Type: String
+
+###############################################################################
+### Resources
+###############################################################################
+
+Resources:
+  Lakeformationsettings:
+    Type: AWS::LakeFormation::DataLakeSettings
+      Properties:
+        Admins:
+            - DataLakePrincipalIdentifier: !Sub '${Adminrole}'
+
+  DatalakeLocation:
+    Type: AWS::LakeFormation::Resource
+    Properties:
+      ResourceArn: !GetAtt  MySourceDataStore.Arn
+      RoleArn: !Sub arn:aws:iam::${AWS::AccountId}:role/aws-service-role/lakeformation.amazonaws.com/AWSServiceRoleForLakeFormationDataAccess
+      UseServiceLinkedRole: true
+
+
