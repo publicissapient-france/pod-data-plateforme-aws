@@ -18,7 +18,7 @@ Metadata:
 ###############################################################################
 
 Parameters:
-  Env:
+  Environment:
     Description: Environment
     Default: prd
     Type: String
@@ -28,6 +28,11 @@ Parameters:
     Default: role
     Type: String
 
+  S3Stack:
+    Description: stack resources S3
+    Default: pod-dp-S3-creation
+    Type: String
+
 ###############################################################################
 ### Resources
 ###############################################################################
@@ -35,14 +40,50 @@ Parameters:
 Resources:
   Lakeformationsettings:
     Type: AWS::LakeFormation::DataLakeSettings
-      Properties:
-        Admins:
-            - DataLakePrincipalIdentifier: !Sub '${Adminrole}'
+    Properties:
+      Admins:
+        - DataLakePrincipalIdentifier: !Sub '${Adminrole}'
 
-  DatalakeLocation:
+  DatalakeLocationPrepared:
     Type: AWS::LakeFormation::Resource
     Properties:
-      ResourceArn: !GetAtt  MySourceDataStore.Arn
+      ResourceArn:
+        'Fn::ImportValue': !Sub '${S3Stack}-prepared-arn'
+      RoleArn: !Sub arn:aws:iam::${AWS::AccountId}:role/aws-service-role/lakeformation.amazonaws.com/AWSServiceRoleForLakeFormationDataAccess
+      UseServiceLinkedRole: true
+
+  DatalakeLocationIncoming:
+    Type: AWS::LakeFormation::Resource
+    Properties:
+      ResourceArn:
+        'Fn::ImportValue': !Sub '${S3Stack}-incoming-arn'
+      RoleArn: !Sub arn:aws:iam::${AWS::AccountId}:role/aws-service-role/lakeformation.amazonaws.com/AWSServiceRoleForLakeFormationDataAccess
+      UseServiceLinkedRole: true
+
+
+  DatalakeLocationGold:
+    Type: AWS::LakeFormation::Resource
+    Properties:
+      ResourceArn:
+        'Fn::ImportValue': !Sub '${S3Stack}-gold-arn'
+      RoleArn: !Sub arn:aws:iam::${AWS::AccountId}:role/aws-service-role/lakeformation.amazonaws.com/AWSServiceRoleForLakeFormationDataAccess
+      UseServiceLinkedRole: true
+
+
+  DatalakeLocationSchema:
+    Type: AWS::LakeFormation::Resource
+    Properties:
+      ResourceArn:
+        'Fn::ImportValue': !Sub '${S3Stack}-schema-arn'
+      RoleArn: !Sub arn:aws:iam::${AWS::AccountId}:role/aws-service-role/lakeformation.amazonaws.com/AWSServiceRoleForLakeFormationDataAccess
+      UseServiceLinkedRole: true
+
+
+  DatalakeLocationRaw:
+    Type: AWS::LakeFormation::Resource
+    Properties:
+      ResourceArn:
+        'Fn::ImportValue': !Sub '${S3Stack}-raw-arn'
       RoleArn: !Sub arn:aws:iam::${AWS::AccountId}:role/aws-service-role/lakeformation.amazonaws.com/AWSServiceRoleForLakeFormationDataAccess
       UseServiceLinkedRole: true
 

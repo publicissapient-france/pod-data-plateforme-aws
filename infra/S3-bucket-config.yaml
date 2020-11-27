@@ -3,24 +3,13 @@ AWSTemplateFormatVersion: '2010-09-09'
 Description: 'S3 bucket configuration Pod data-plateforme'
 
 ###############################################################################
-### Metadata
-###############################################################################
-
-#Metadata:
-#  'AWS::CloudFormation::Interface':
-#    ParameterGroups:
-#      - Label:
-#          default: 'pod data-plateforme '
-
-
-###############################################################################
 ### Parameters
 ###############################################################################
 
 Parameters:
   Environment:
     Description: Environment
-    Default: prd
+    Default: prod
     Type: String
 
 ###############################################################################
@@ -39,6 +28,7 @@ Resources:
       Tags:
         - Key: Description
           Value: pod-dataplateform
+    DeletionPolicy: Retain
 
   Raw:
     Type: AWS::S3::Bucket
@@ -51,6 +41,7 @@ Resources:
       Tags:
         - Key: Description
           Value: pod-dataplateform
+    DeletionPolicy: Retain
 
   Prepared:
     Type: AWS::S3::Bucket
@@ -63,6 +54,7 @@ Resources:
       Tags:
         - Key: Description
           Value: pod-dataplateform
+    DeletionPolicy: Retain
 
   Gold:
     Type: AWS::S3::Bucket
@@ -75,19 +67,82 @@ Resources:
       Tags:
         - Key: Description
           Value: pod-dataplateform
+    DeletionPolicy: Retain
 
-#  S3BucketPolicy:
-#    Type: AWS::S3::BucketPolicy
-#    Properties:
-#      Bucket: !Ref Incoming
-#      PolicyDocument:
-#        Statement:
-#          - Sid: PutObjectAccess
-#            Action:
-#              - s3:PutObject
-#            Effect: Allow
-#            Principal:
-#              AWS:
-#                - '123456789012' # Replace with a valid source AWS Account Id
-#            Resource:
-#              - !Sub "arn:aws:s3:::${BucketName}"
+  Schema:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub 'pod-dp-${Environment}-schema'
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      Tags:
+        - Key: Description
+          Value: pod-dataplateform
+    DeletionPolicy: Retain
+
+###############################################################################
+### Outputs
+###############################################################################
+
+Outputs:
+  RawBucket:
+    Description: Id of the raw bucket
+    Value: !Ref Raw
+    Export:
+      Name: !Sub "${AWS::StackName}-raw"
+
+  RawBucketArn:
+    Description: Arn of the raw bucket
+    Value: !GetAtt Raw.Arn
+    Export:
+      Name: !Sub "${AWS::StackName}-raw-arn"
+
+  PreparedBucket:
+    Description: Id of the Prepared bucket
+    Value: !Ref Prepared
+    Export:
+      Name: !Sub "${AWS::StackName}-prepared"
+
+  PreparedBucketArn:
+    Description: Arn of the Prepared bucket
+    Value: !GetAtt Prepared.Arn
+    Export:
+      Name: !Sub "${AWS::StackName}-prepared-arn"
+
+  GoldBucket:
+    Description: Id of the Gold bucket
+    Value: !Ref Gold
+    Export:
+      Name: !Sub "${AWS::StackName}-gold"
+
+  GoldBucketArn:
+    Description: Arn of the Gold bucket
+    Value: !GetAtt Gold.Arn
+    Export:
+      Name: !Sub "${AWS::StackName}-gold-arn"
+
+  SchemaBucket:
+    Description: Id of the Schema bucket
+    Value: !Ref Schema
+    Export:
+      Name: !Sub "${AWS::StackName}-schema"
+
+  SchemaBucketArn:
+    Description: Arn of the Schema bucket
+    Value: !GetAtt Schema.Arn
+    Export:
+      Name: !Sub "${AWS::StackName}-schema-arn"
+
+  IncomingBucket:
+    Description: Id of the Incomming bucket
+    Value: !Ref Incoming
+    Export:
+      Name: !Sub "${AWS::StackName}-incoming"
+
+  IncomingBucketArn:
+    Description: Id of the Incomming bucket
+    Value: !GetAtt Incoming.Arn
+    Export:
+      Name: !Sub "${AWS::StackName}-incoming-arn"
