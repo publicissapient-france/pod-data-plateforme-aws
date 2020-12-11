@@ -1,14 +1,19 @@
-from __future__ import print_function
 import boto3
-import urllib
-import logging 
+import os
+import json
+import logging
 
-glue = boto3.client('glue')
+logger = logging.getLogger()
+logger.setLevel(logging.INFO)
 
 def lambda_handler(event, context):
-    
-    
-    gluejobname="pod-data-platfrom-glue-job"
-    runId = glue.start_job_run(JobName=gluejobname)
-    status = glue.get_job_run(JobName=gluejobname, RunId=runId['JobRunId'])
-    logging.info("Job Status : ", status['JobRun']['JobRunState'])
+  stepfunction = boto3.client('stepfunctions')
+  stateMachineArn = os.environ['STATEMACHINEARN']
+  input = json.dumps(event)
+  logger.info(f'Step Function trigger input: {input}')
+
+  response = stepfunction.start_execution(
+    stateMachineArn=stateMachineArn,
+    input=input
+  )
+  logger.info(f'Step Function trigger response: {response}')

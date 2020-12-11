@@ -1,6 +1,6 @@
 ---
 AWSTemplateFormatVersion: '2010-09-09'
-Description: 'Events configuration Pod data-platform'
+Description: 'Ingestion pipeline Pod data-platform'
 
 ###############################################################################
 ### Parameters
@@ -9,17 +9,16 @@ Description: 'Events configuration Pod data-platform'
 Parameters:
   Environment:
     Description: Environment
-    Default: 'test'
+    Default: prod
     Type: String
 
   IncomingBucketName:
     Description: Environment
-    Default: 'pod-dp-test-incoming'
+    Default: pod-dp-prod-incoming
     Type: String
 
   IngestionStateMachineArn:
-    Description: Environment
-    Default: 'arn:aws:states:us-east-2:943054598959:stateMachine:convert-crawl-data'
+    Description: Arn of the ingestion pipeline state machine
     Type: String
 
 ###############################################################################
@@ -27,22 +26,6 @@ Parameters:
 ###############################################################################
 
 Resources:
-  IncomingBucket:
-    Type: AWS::S3::Bucket
-    DependsOn:
-      - IngestionSFTriggerLambdaPermission
-    Properties:
-      BucketName: !Ref IncomingBucketName
-      NotificationConfiguration:
-        LambdaConfigurations:
-          - Event: s3:ObjectCreated:*
-            Function: !GetAtt IngestionSFTriggerLambdaFunction.Arn
-#            Filter:
-#              S3Key:
-#                Rules:
-#                - Name: suffix
-#                  Value: .csv
-
   IngestionSFTriggerLambdaPermission:
     Type: AWS::Lambda::Permission
     Properties:
@@ -51,6 +34,9 @@ Resources:
       Principal: s3.amazonaws.com
       SourceArn: !Sub 'arn:aws:s3:::${IncomingBucketName}'
       SourceAccount: !Ref AWS::AccountId
+      Tags:
+        - Key: Description
+          Value: pod-dataplateform
 
   IngestionSFTriggerLambdaExecutionRole:
     Type: AWS::IAM::Role
@@ -84,11 +70,14 @@ Resources:
               - states:StartExecution
               - s3:DeleteObject
               Resource:  !Ref IngestionStateMachineArn
+      Tags:
+        - Key: Description
+          Value: pod-dataplateform
 
   IngestionSFTriggerLambdaFunction:
     Type: AWS::Lambda::Function
     Properties:
-      FunctionName: 'IngestionStateMachineTrigger'
+      FunctionName: IngestionStateMachineTrigger
       Code:
         ZipFile: |
           import boto3
@@ -118,3 +107,15 @@ Resources:
       Runtime: python3.8
       MemorySize: 256
       Timeout: 128
+      Tags:
+        - Key: Description
+          Value: pod-dataplateform
+
+###############################################################################
+### Outputs
+###############################################################################
+
+Outputs:
+  IngestionSFTriggerLambdaFunctionArn:
+    Description: Arn of the Lambda that triggers the ingestion pipeline state machine
+    Value: !GetAtt IngestionSFTriggerLambdaFunction.Arn
