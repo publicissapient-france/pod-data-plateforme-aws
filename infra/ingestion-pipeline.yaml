@@ -68,7 +68,6 @@ Resources:
             - Effect: Allow
               Action:
               - states:StartExecution
-              - s3:DeleteObject
               Resource:  !Ref IngestionStateMachineArn
       Tags:
         - Key: Description
