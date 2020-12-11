@@ -36,7 +36,7 @@ Resources:
       SourceAccount: !Ref AWS::AccountId
       Tags:
         - Key: Description
-          Value: pod-dataplateform
+          Value: pod-dataplatform
 
   IngestionSFTriggerLambdaExecutionRole:
     Type: AWS::IAM::Role
@@ -71,7 +71,7 @@ Resources:
               Resource:  !Ref IngestionStateMachineArn
       Tags:
         - Key: Description
-          Value: pod-dataplateform
+          Value: pod-dataplatform
 
   IngestionSFTriggerLambdaFunction:
     Type: AWS::Lambda::Function
@@ -108,7 +108,7 @@ Resources:
       Timeout: 128
       Tags:
         - Key: Description
-          Value: pod-dataplateform
+          Value: pod-dataplatform
 
 ###############################################################################
 ### Outputs
