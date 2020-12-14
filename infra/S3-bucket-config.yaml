@@ -33,11 +33,11 @@ Resources:
         LambdaConfigurations:
           - Event: s3:ObjectCreated:*
             Function: !Ref IngestionSFTriggerLambdaFunctionArn
-#            Filter:
-#              S3Key:
-#                Rules:
-#                - Name: suffix
-#                  Value: .csv
+            Filter:
+              S3Key:
+                Rules:
+                - Name: suffix
+                  Value: .csv
       Tags:
         - Key: Description
           Value: pod-dataplatform
