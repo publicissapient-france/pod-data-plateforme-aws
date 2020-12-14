@@ -1,0 +1,120 @@
+---
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Ingestion pipeline Pod data-platform'
+
+###############################################################################
+### Parameters
+###############################################################################
+
+Parameters:
+  Environment:
+    Description: Environment
+    Default: prod
+    Type: String
+
+  IncomingBucketName:
+    Description: Environment
+    Default: pod-dp-prod-incoming
+    Type: String
+
+  IngestionStateMachineArn:
+    Description: Arn of the ingestion pipeline state machine
+    Type: String
+
+###############################################################################
+### Resources
+###############################################################################
+
+Resources:
+  IngestionSFTriggerLambdaPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: 'lambda:InvokeFunction'
+      FunctionName: !Ref IngestionSFTriggerLambdaFunction
+      Principal: s3.amazonaws.com
+      SourceArn: !Sub 'arn:aws:s3:::${IncomingBucketName}'
+      SourceAccount: !Ref AWS::AccountId
+      Tags:
+        - Key: Description
+          Value: pod-dataplatform
+
+  IngestionSFTriggerLambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service:
+            - lambda.amazonaws.com
+          Action:
+          - sts:AssumeRole
+      Policies:
+        - PolicyName: allowLogging
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+            - Effect: Allow
+              Action:
+              - logs:CreateLogGroup
+              - logs:CreateLogStream
+              - logs:PutLogEvents
+              Resource: '*'
+        - PolicyName: startStepFunction
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+            - Effect: Allow
+              Action:
+              - states:StartExecution
+              Resource:  !Ref IngestionStateMachineArn
+      Tags:
+        - Key: Description
+          Value: pod-dataplatform
+
+  IngestionSFTriggerLambdaFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: IngestionStateMachineTrigger
+      Code:
+        ZipFile: |
+          import boto3
+          import os
+          import json
+          import logging
+
+          logger = logging.getLogger()
+          logger.setLevel(logging.INFO)
+
+          def lambda_handler(event, context):
+              stepfunction = boto3.client('stepfunctions')
+              stateMachineArn = os.environ['STATEMACHINEARN']
+              input = json.dumps(event)
+              logger.info(f'Step Function trigger input: {input}')
+
+              response = stepfunction.start_execution(
+                stateMachineArn=stateMachineArn,
+                input=input
+              )
+              logger.info(f'Step Function trigger response: {response}')
+      Handler: index.lambda_handler
+      Environment:
+        Variables:
+          STATEMACHINEARN: !Ref IngestionStateMachineArn
+      Role: !GetAtt IngestionSFTriggerLambdaExecutionRole.Arn
+      Runtime: python3.8
+      MemorySize: 256
+      Timeout: 128
+      Tags:
+        - Key: Description
+          Value: pod-dataplatform
+
+###############################################################################
+### Outputs
+###############################################################################
+
+Outputs:
+  IngestionSFTriggerLambdaFunctionArn:
+    Description: Arn of the Lambda that triggers the ingestion pipeline state machine
+    Value: !GetAtt IngestionSFTriggerLambdaFunction.Arn

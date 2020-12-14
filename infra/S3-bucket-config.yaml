@@ -12,6 +12,10 @@ Parameters:
     Default: prod
     Type: String
 
+  IngestionSFTriggerLambdaFunctionArn:
+    Description: Arn of the Lambda that triggers the ingestion pipeline state machine
+    Type: String
+
 ###############################################################################
 ### Resources
 ###############################################################################
@@ -25,9 +29,18 @@ Resources:
         ServerSideEncryptionConfiguration:
           - ServerSideEncryptionByDefault:
               SSEAlgorithm: AES256
+      NotificationConfiguration:
+        LambdaConfigurations:
+          - Event: s3:ObjectCreated:*
+            Function: !Ref IngestionSFTriggerLambdaFunctionArn
+            Filter:
+              S3Key:
+                Rules:
+                - Name: suffix
+                  Value: .csv
       Tags:
         - Key: Description
-          Value: pod-dataplateform
+          Value: pod-dataplatform
     DeletionPolicy: Retain
 
   Raw:
@@ -40,7 +53,7 @@ Resources:
               SSEAlgorithm: AES256
       Tags:
         - Key: Description
-          Value: pod-dataplateform
+          Value: pod-dataplatform
     DeletionPolicy: Retain
 
   Prepared:
@@ -53,7 +66,7 @@ Resources:
               SSEAlgorithm: AES256
       Tags:
         - Key: Description
-          Value: pod-dataplateform
+          Value: pod-dataplatform
     DeletionPolicy: Retain
 
   Gold:
@@ -66,7 +79,7 @@ Resources:
               SSEAlgorithm: AES256
       Tags:
         - Key: Description
-          Value: pod-dataplateform
+          Value: pod-dataplatform
     DeletionPolicy: Retain
 
   Schema:
@@ -79,7 +92,7 @@ Resources:
               SSEAlgorithm: AES256
       Tags:
         - Key: Description
-          Value: pod-dataplateform
+          Value: pod-dataplatform
     DeletionPolicy: Retain
 
 ###############################################################################
