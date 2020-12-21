@@ -16,6 +16,21 @@ Parameters:
     Description: Environment
     Default: pod-dp-prod-incoming
     Type: String
+    
+  RawBucketName:
+    Description: Environment
+    Default: pod-dp-prod-raw
+    Type: String
+  
+  SchemaBucketName:
+    Description: Environment
+    Default: pod-dp-prod-schema
+    Type: String
+
+  PreparedBucketName:
+    Description: Environment
+    Default: pod-dp-prod-prepared
+    Type: String
   
   ArtifactBucketName:
     Description: Environment
@@ -35,18 +50,12 @@ Parameters:
   IngestionStateMachineArn:
     Description: Arn of the ingestion pipeline state machine
     Type: String
-  
-  DatabaseName:
-    Type: String
-    MinLength: "4"
-    Default: "pod_dataplatform"
-    Description: "Name of the AWS Glue database to contain this CloudFormation template's tables."
 
-  TableName:
+  JobLanguage:
     Type: String
     MinLength: "4"
-    Default: "default_table_name"
-    Description: "Name of the Sales Pipeline data table in AWS Glue."
+    Default: "scala"
+    Description: "Language of the ingestion AWS Glue Job."
 
 ###############################################################################
 ### Resources
@@ -77,10 +86,16 @@ Resources:
                   - "s3:ListBucket"
                   - "s3:DeleteObject"
                 Resource:
-                  - !Sub "arn:aws:s3:::${IncomingBucketName}"
-                  - !Sub "arn:aws:s3:::${IncomingBucketName}/*"
+                  - !Sub "arn:aws:s3:::${RawBucketName}"
+                  - !Sub "arn:aws:s3:::${RawBucketName}/*"
+                  - !Sub "arn:aws:s3:::${SchemaBucketName}"
+                  - !Sub "arn:aws:s3:::${SchemaBucketName}/*"
+                  - !Sub "arn:aws:s3:::${PreparedBucketName}"
+                  - !Sub "arn:aws:s3:::${PreparedBucketName}/*"
                   - !Sub "arn:aws:s3:::${ArtifactBucketName}"
                   - !Sub "arn:aws:s3:::${ArtifactBucketName}/*"
+                  - !Sub "arn:aws:s3:::${IncomingBucketName}"
+                  - !Sub "arn:aws:s3:::${IncomingBucketName}/*"
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/service-role/AWSGlueServiceRole
       Path: "/"
@@ -142,9 +157,10 @@ Resources:
         "ScriptLocation": !Sub "s3://${ArtifactBucketName}/${ETLScriptsPrefix}/process_data_ingestion.scala"
       }
       DefaultArguments: {
-          "--database_name" : !Ref DatabaseName,
-          "--table_name" : !Ref TableName,
-          "--s3_output_path": !Sub "s3://${DataBucketName}/${ETLOutputPrefix}/process/"
+          "--job-language" : !Ref JobLanguage,
+          "--raw-bucket-name" : !Ref RawBucketName,
+          "--schema-bucket-name" : !Ref SchemaBucketName,
+          "--prepared-bucket-name" : !Ref PreparedBucketName
       }
       MaxRetries: 0
       Description: "Process data ingestion for pod-data-platform-job."
