@@ -94,8 +94,6 @@ Resources:
                   - !Sub "arn:aws:s3:::${PreparedBucketName}/*"
                   - !Sub "arn:aws:s3:::${ArtifactBucketName}"
                   - !Sub "arn:aws:s3:::${ArtifactBucketName}/*"
-                  - !Sub "arn:aws:s3:::${IncomingBucketName}"
-                  - !Sub "arn:aws:s3:::${IncomingBucketName}/*"
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/service-role/AWSGlueServiceRole
       Path: "/"
