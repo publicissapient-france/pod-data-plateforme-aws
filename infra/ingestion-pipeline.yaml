@@ -16,16 +16,88 @@ Parameters:
     Description: Environment
     Default: pod-dp-prod-incoming
     Type: String
+    
+  RawBucketName:
+    Description: Environment
+    Default: pod-dp-prod-raw
+    Type: String
+  
+  SchemaBucketName:
+    Description: Environment
+    Default: pod-dp-prod-schema
+    Type: String
+
+  PreparedBucketName:
+    Description: Environment
+    Default: pod-dp-prod-prepared
+    Type: String
+  
+  ArtifactBucketName:
+    Description: Environment
+    Default: pod-dp-prod-incoming
+    Type: String
+
+   ETLScriptsPrefix:
+    Type: String
+    MinLength: "1"
+    Description: "Location of the Glue job ETL scripts in S3."
+
+  ETLOutputPrefix:
+    Type: String
+    MinLength: "1"
+    Description: "Name of the S3 output path to which this CloudFormation template's AWS Glue jobs are going to write ETL output."
 
   IngestionStateMachineArn:
     Description: Arn of the ingestion pipeline state machine
     Type: String
+
+  JobLanguage:
+    Type: String
+    MinLength: "4"
+    Default: "scala"
+    Description: "Language of the ingestion AWS Glue Job."
 
 ###############################################################################
 ### Resources
 ###############################################################################
 
 Resources:
+  AWSGlueJobRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - glue.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Policies:
+        - PolicyName: root
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - "s3:GetObject"
+                  - "s3:PutObject"
+                  - "s3:ListBucket"
+                  - "s3:DeleteObject"
+                Resource:
+                  - !Sub "arn:aws:s3:::${RawBucketName}"
+                  - !Sub "arn:aws:s3:::${RawBucketName}/*"
+                  - !Sub "arn:aws:s3:::${SchemaBucketName}"
+                  - !Sub "arn:aws:s3:::${SchemaBucketName}/*"
+                  - !Sub "arn:aws:s3:::${PreparedBucketName}"
+                  - !Sub "arn:aws:s3:::${PreparedBucketName}/*"
+                  - !Sub "arn:aws:s3:::${ArtifactBucketName}"
+                  - !Sub "arn:aws:s3:::${ArtifactBucketName}/*"
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSGlueServiceRole
+      Path: "/"
+      
   IngestionSFTriggerLambdaPermission:
     Type: AWS::Lambda::Permission
     Properties:
@@ -72,6 +144,25 @@ Resources:
       Tags:
         - Key: Description
           Value: pod-dataplatform
+  
+  GlueDataIngestionJob:
+    Type: "AWS::Glue::Job"
+    Properties:
+      Role: !Ref AWSGlueJobRole
+      Name: "GlueDataIngestionJob"
+      Command: {
+        "Name" : "glueetl",
+        "ScriptLocation": !Sub "s3://${ArtifactBucketName}/${ETLScriptsPrefix}/process_data_ingestion.scala"
+      }
+      DefaultArguments: {
+          "--job-language" : !Ref JobLanguage,
+          "--raw-bucket-name" : !Ref RawBucketName,
+          "--schema-bucket-name" : !Ref SchemaBucketName,
+          "--prepared-bucket-name" : !Ref PreparedBucketName
+      }
+      MaxRetries: 0
+      Description: "Process data ingestion for pod-data-platform-job."
+      AllocatedCapacity: 5
 
   IngestionSFTriggerLambdaFunction:
     Type: AWS::Lambda::Function
