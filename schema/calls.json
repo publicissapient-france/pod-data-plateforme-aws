@@ -2,12 +2,12 @@
   "type" : "struct",
   "fields" : [ {
     "name" : "call_id",
-    "type" : "integer",
+    "type" : "long",
     "nullable" : false,
     "metadata" : { }
   }, {
     "name" : "customer_id",
-    "type" : "integer",
+    "type" : "long",
     "nullable" : true,
     "metadata" : { }
   }, {
@@ -27,7 +27,7 @@
     "metadata" : { }
   }, {
     "name" : "phone_number_called",
-    "type" : "long",
+    "type" : "string",
     "nullable" : true,
     "metadata" : { }
   }, {

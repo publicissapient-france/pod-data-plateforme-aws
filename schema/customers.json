@@ -2,7 +2,7 @@
   "type" : "struct",
   "fields" : [ {
     "name" : "id",
-    "type" : "integer",
+    "type" : "long",
     "nullable" : false,
     "metadata" : { }
   }, {
@@ -42,7 +42,7 @@
     "metadata" : { }
   }, {
     "name" : "phone",
-    "type" : "long",
+    "type" : "string",
     "nullable" : true,
     "metadata" : { }
   }]
