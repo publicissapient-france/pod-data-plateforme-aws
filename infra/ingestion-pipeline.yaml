@@ -9,35 +9,15 @@ Description: 'Ingestion pipeline Pod data-platform'
 Parameters:
   Environment:
     Description: Environment
-    Default: prod
+    Default: prd
     Type: String
 
-  IncomingBucketName:
-    Description: Environment
-    Default: pod-dp-prod-incoming
-    Type: String
-    
-  RawBucketName:
-    Description: Environment
-    Default: pod-dp-prod-raw
-    Type: String
-  
-  SchemaBucketName:
-    Description: Environment
-    Default: pod-dp-prod-schema
+  S3Stack:
+    Description: stack resources S3
+    Default: pod-dp-s3
     Type: String
 
-  PreparedBucketName:
-    Description: Environment
-    Default: pod-dp-prod-prepared
-    Type: String
-  
-  ArtifactBucketName:
-    Description: Environment
-    Default: pod-dp-prod-incoming
-    Type: String
-
-   ETLScriptsPrefix:
+  ETLScriptsPrefix:
     Type: String
     MinLength: "1"
     Description: "Location of the Glue job ETL scripts in S3."
@@ -86,14 +66,14 @@ Resources:
                   - "s3:ListBucket"
                   - "s3:DeleteObject"
                 Resource:
-                  - !Sub "arn:aws:s3:::${RawBucketName}"
-                  - !Sub "arn:aws:s3:::${RawBucketName}/*"
-                  - !Sub "arn:aws:s3:::${SchemaBucketName}"
-                  - !Sub "arn:aws:s3:::${SchemaBucketName}/*"
-                  - !Sub "arn:aws:s3:::${PreparedBucketName}"
-                  - !Sub "arn:aws:s3:::${PreparedBucketName}/*"
-                  - !Sub "arn:aws:s3:::${ArtifactBucketName}"
-                  - !Sub "arn:aws:s3:::${ArtifactBucketName}/*"
+                  - 'Fn::ImportValue': !Sub '${S3Stack}-raw-arn'
+                  - !Join ['', [ 'Fn::ImportValue': !Sub "${S3Stack}-raw-arn",'/*' ]]
+                  - 'Fn::ImportValue': !Sub "${S3Stack}-schema-arn"
+                  - !Join ['', [ 'Fn::ImportValue': !Sub "${S3Stack}-schema-arn",'/*' ]]
+                  - 'Fn::ImportValue': !Sub "${S3Stack}-prepared-arn"
+                  - !Join ['',[ 'Fn::ImportValue': !Sub "${S3Stack}-prepared-arn",'/*' ]]
+                  - 'Fn::ImportValue': !Sub "${S3Stack}-incoming-arn"
+                  - !Join  ['',[ 'Fn::ImportValue': !Sub "${S3Stack}-incoming-arn",'/*' ]]
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/service-role/AWSGlueServiceRole
       Path: "/"
@@ -104,7 +84,8 @@ Resources:
       Action: 'lambda:InvokeFunction'
       FunctionName: !Ref IngestionSFTriggerLambdaFunction
       Principal: s3.amazonaws.com
-      SourceArn: !Sub 'arn:aws:s3:::${IncomingBucketName}'
+      SourceArn:
+        'Fn::ImportValue': !Sub '${S3Stack}-incoming-arn'
       SourceAccount: !Ref AWS::AccountId
       Tags:
         - Key: Description
@@ -152,13 +133,13 @@ Resources:
       Name: "GlueDataIngestionJob"
       Command: {
         "Name" : "glueetl",
-        "ScriptLocation": !Sub "s3://${ArtifactBucketName}/${ETLScriptsPrefix}/process_data_ingestion.scala"
+        "ScriptLocation": !Join ['',[ 's3://','Fn::ImportValue': !Sub "${S3Stack}-incoming",!Sub "/${ETLScriptsPrefix}/process_data_ingestion.scala" ]]
       }
       DefaultArguments: {
           "--job-language" : !Ref JobLanguage,
-          "--raw-bucket-name" : !Ref RawBucketName,
-          "--schema-bucket-name" : !Ref SchemaBucketName,
-          "--prepared-bucket-name" : !Ref PreparedBucketName
+          "--raw-bucket-name" : ['Fn::ImportValue': !Sub "${S3Stack}-raw"],
+          "--schema-bucket-name" :  ['Fn::ImportValue': !Sub "${S3Stack}-schema"],
+          "--prepared-bucket-name" : ['Fn::ImportValue': !Sub "${S3Stack}-prepared"],
       }
       MaxRetries: 0
       Description: "Process data ingestion for pod-data-platform-job."

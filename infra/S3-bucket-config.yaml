@@ -9,7 +9,7 @@ Description: 'S3 bucket configuration Pod data-plateforme'
 Parameters:
   Environment:
     Description: Environment
-    Default: prod
+    Default: prd
     Type: String
 
   IngestionSFTriggerLambdaFunctionArn:
@@ -29,15 +29,6 @@ Resources:
         ServerSideEncryptionConfiguration:
           - ServerSideEncryptionByDefault:
               SSEAlgorithm: AES256
-      NotificationConfiguration:
-        LambdaConfigurations:
-          - Event: s3:ObjectCreated:*
-            Function: !Ref IngestionSFTriggerLambdaFunctionArn
-            Filter:
-              S3Key:
-                Rules:
-                - Name: suffix
-                  Value: .csv
       Tags:
         - Key: Description
           Value: pod-dataplatform
