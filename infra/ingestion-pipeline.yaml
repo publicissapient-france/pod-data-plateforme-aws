@@ -347,6 +347,7 @@ Resources:
 
           def lambda_handler(event, context):
               client = boto3.client('glue')
+          
               client.start_crawler(Name=event['crawler-name'])
       Handler: index.lambda_handler
       Role: !GetAtt IngestionCrawlerTriggerLambdaExecutionRole.Arn
