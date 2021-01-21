@@ -62,6 +62,91 @@ Parameters:
 ###############################################################################
 
 Resources:
+  IngestionStateMachine:
+    Type: AWS::StepFunctions::StateMachine
+    Properties: 
+      DefinitionString: 
+        !Sub
+        - |
+          {
+            "Comment": "State Machine to run ingestion pipeline",
+            "StartAt": "MoveDataToRawBucket",
+            "States": {
+              "MoveDataToRawBucket": {
+                  "Type": "Task",
+                  "Resource": "${MoveDataToRawBucketLambdaArn}",
+                  "Next": "GlueJob"
+              },
+              "GlueJob": {
+                  "Type": "Task",
+                  "Resource": "arn:aws:states:::glue:startJobRun.sync",
+                  "Parameters": {
+                    "JobName": "${GlueDataIngestionJob}",
+                    "Arguments": {
+                      "--rawBucketName.$": "$.rawBucketName",
+                      "--preparedBucketName.$": "$.preparedBucketName",
+                      "--schemaBucketName.$": "$.schemaBucketName",
+                      "--sourceName.$": "$.sourceName",
+                      "--tableName.$": "$.tableName"
+                    }
+                  },
+                  "Next": "Start Crawler"
+                },
+                "Start Crawler": {
+                  "Type": "Task",
+                  "Resource": "arn:aws:states:::lambda:invoke",
+                  "Parameters": {
+                    "FunctionName": "arn:aws:lambda:us-east-2:943054598959:function:start-crawler:$LATEST",
+                    "Payload": {
+                      "crawler-name": "$.sourceName"
+                    }
+                  },
+                  "End": true
+                }
+            }
+          }
+        - MoveDataToRawBucketLambdaArn: !GetAtt MoveDataToRawBucketLambda.Arn
+          GlueDataIngestionJob: !Ref GlueDataIngestionJob
+      RoleArn: !GetAtt IngestionStateMachineRole.Arn
+      StateMachineName: IngestionStateMachine
+      Tags:
+        - Key: Description
+          Value: pod-dataplatform
+  
+  IngestionStateMachineRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: IngestionStateMachineRole
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service:
+              - states.amazonaws.com
+          Action:
+            - sts:AssumeRole
+      Policies:
+        - PolicyName: LambdaExecution
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+            - Effect: Allow
+              Action: lambda:InvokeFunction
+              Resource: "*"
+        - PolicyName: Glue
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+            - Effect: Allow
+              Action:
+                - "glue:StartJobRun"
+                - "glue:GetJobRun"
+                - "glue:GetJobRuns"
+                - "glue:BatchStopJobRun"
+              Resource: "*"
+      Path: "/"
+
   AWSGlueJobRole:
     Type: "AWS::IAM::Role"
     Properties:
@@ -144,6 +229,41 @@ Resources:
       Tags:
         - Key: Description
           Value: pod-dataplatform
+
+  IngestionCrawlerTriggerLambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service:
+            - lambda.amazonaws.com
+          Action:
+          - sts:AssumeRole
+      Policies:
+        - PolicyName: allowLogging
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+            - Effect: Allow
+              Action:
+              - logs:CreateLogGroup
+              - logs:CreateLogStream
+              - logs:PutLogEvents
+              Resource: '*'
+        - PolicyName: startGlueCrawler
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+            - Effect: Allow
+              Action:
+              - glue:StartCrawler
+              Resource:  '*'
+      Tags:
+        - Key: Description
+          Value: pod-dataplatform
   
   GlueDataIngestionJob:
     Type: "AWS::Glue::Job"
@@ -178,22 +298,58 @@ Resources:
           logger = logging.getLogger()
           logger.setLevel(logging.INFO)
 
-          def lambda_handler(event, context):
-              stepfunction = boto3.client('stepfunctions')
-              stateMachineArn = os.environ['STATEMACHINEARN']
-              input = json.dumps(event)
-              logger.info(f'Step Function trigger input: {input}')
 
-              response = stepfunction.start_execution(
-                stateMachineArn=stateMachineArn,
-                input=input
+          def lambda_handler(event, context):
+              sf_client = boto3.client('stepfunctions')
+              state_machine_arn = os.environ['STATEMACHINEARN']
+
+              event_key = event['Records'][0]['s3']['object']['key']
+              filename = os.path.basename(event_key)
+              source_name = event_key.split("/")[0]
+              table_name = os.path.splitext(filename)[0]
+
+              sm_input = json.dumps({
+                  "rawBucketName": os.environ['RAWBUCKETNAME'],
+                  "preparedBucketName": os.environ['PREPAREDBUCKETNAME'],
+                  "schemaBucketName": os.environ['SCHEMABUCKETNAME'],
+                  "sourceName": source_name,
+                  "tableName": table_name,
+              })
+              logger.info(f'Step Function trigger input: {sm_input}')
+
+              response = sf_client.start_execution(
+                  stateMachineArn=state_machine_arn,
+                  input=sm_input
               )
               logger.info(f'Step Function trigger response: {response}')
       Handler: index.lambda_handler
       Environment:
         Variables:
           STATEMACHINEARN: !Ref IngestionStateMachineArn
+          RAWBUCKETNAME: !Ref RawBucketName
+          PREPAREDBUCKETNAME: !Ref PreparedBucketName
+          SCHEMABUCKETNAME: !Ref SchemaBucketName
       Role: !GetAtt IngestionSFTriggerLambdaExecutionRole.Arn
+      Runtime: python3.8
+      MemorySize: 256
+      Timeout: 128
+      Tags:
+        - Key: Description
+          Value: pod-dataplatform
+
+  IngestionCrawlerTriggerLambdaFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: IngestionCrawlerTrigger
+      Code:
+        ZipFile: |
+          import boto3
+
+          def lambda_handler(event, context):
+              client = boto3.client('glue')
+              client.start_crawler(Name=event['crawler-name'])
+      Handler: index.lambda_handler
+      Role: !GetAtt IngestionCrawlerTriggerLambdaExecutionRole.Arn
       Runtime: python3.8
       MemorySize: 256
       Timeout: 128

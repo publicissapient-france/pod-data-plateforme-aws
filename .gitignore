@@ -13,3 +13,4 @@ logs/
 .coverage
 *.egg-info/
 *.DS_Store
+venv/
