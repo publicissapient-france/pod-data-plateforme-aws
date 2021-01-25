@@ -83,22 +83,11 @@ Resources:
                   "Parameters": {
                     "JobName": "${GlueDataIngestionJob}",
                     "Arguments": {
-                      "--rawBucketName.$": "$.rawBucketName",
-                      "--preparedBucketName.$": "$.preparedBucketName",
-                      "--schemaBucketName.$": "$.schemaBucketName",
+                      "--rawBucketName.$": ${RawBucketName},
+                      "--preparedBucketName.$": ${PreparedBucketName},
+                      "--schemaBucketName.$": ${SchemaBucketName},
                       "--sourceName.$": "$.sourceName",
                       "--tableName.$": "$.tableName"
-                    }
-                  },
-                  "Next": "Start Crawler"
-                },
-                "Start Crawler": {
-                  "Type": "Task",
-                  "Resource": "arn:aws:states:::lambda:invoke",
-                  "Parameters": {
-                    "FunctionName": "arn:aws:lambda:us-east-2:943054598959:function:start-crawler:$LATEST",
-                    "Payload": {
-                      "crawler-name": "$.sourceName"
                     }
                   },
                   "End": true
@@ -230,7 +219,7 @@ Resources:
         - Key: Description
           Value: pod-dataplatform
 
-  IngestionCrawlerTriggerLambdaExecutionRole:
+  MoveDataToRawBucketLambdaExecutionRole:
     Type: AWS::IAM::Role
     Properties:
       AssumeRolePolicyDocument:
@@ -253,14 +242,31 @@ Resources:
               - logs:CreateLogStream
               - logs:PutLogEvents
               Resource: '*'
-        - PolicyName: startGlueCrawler
+        - PolicyName: S3List
           PolicyDocument:
             Version: '2012-10-17'
             Statement:
             - Effect: Allow
               Action:
-              - glue:StartCrawler
-              Resource:  '*'
+              - s3:ListBucket
+              Resource:
+                - !Sub "arn:aws:s3:::${IncomingBucketName}",
+                - !Sub "arn:aws:s3:::${RawBucketName}"
+        - PolicyName: S3Read
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+            - Effect: Allow
+              Action:
+                - "s3:GetObject"
+                - "s3:PutObject"
+                - "s3:DeleteObject"
+                - "s3:ListBucket"
+              Resource:
+                - !Sub "arn:aws:s3:::${IncomingBucketName}",
+                - !Sub "arn:aws:s3:::${IncomingBucketName}/*",
+                - !Sub "arn:aws:s3:::${RawBucketName}"
+                - !Sub "arn:aws:s3:::${RawBucketName}/*"
       Tags:
         - Key: Description
           Value: pod-dataplatform
@@ -304,16 +310,10 @@ Resources:
               state_machine_arn = os.environ['STATEMACHINEARN']
 
               event_key = event['Records'][0]['s3']['object']['key']
-              filename = os.path.basename(event_key)
-              source_name = event_key.split("/")[0]
-              table_name = os.path.splitext(filename)[0]
+
 
               sm_input = json.dumps({
-                  "rawBucketName": os.environ['RAWBUCKETNAME'],
-                  "preparedBucketName": os.environ['PREPAREDBUCKETNAME'],
-                  "schemaBucketName": os.environ['SCHEMABUCKETNAME'],
-                  "sourceName": source_name,
-                  "tableName": table_name,
+                  "event_key": event_key
               })
               logger.info(f'Step Function trigger input: {sm_input}')
 
@@ -326,9 +326,6 @@ Resources:
       Environment:
         Variables:
           STATEMACHINEARN: !Ref IngestionStateMachineArn
-          RAWBUCKETNAME: !Ref RawBucketName
-          PREPAREDBUCKETNAME: !Ref PreparedBucketName
-          SCHEMABUCKETNAME: !Ref SchemaBucketName
       Role: !GetAtt IngestionSFTriggerLambdaExecutionRole.Arn
       Runtime: python3.8
       MemorySize: 256
@@ -337,20 +334,55 @@ Resources:
         - Key: Description
           Value: pod-dataplatform
 
-  IngestionCrawlerTriggerLambdaFunction:
+  MoveDataToRawBucketLambda:
     Type: AWS::Lambda::Function
     Properties:
-      FunctionName: IngestionCrawlerTrigger
+      FunctionName: MoveDataToRawBucketFunction
       Code:
         ZipFile: |
+          import os
+          import json
+          import logging
           import boto3
 
+          logger = logging.getLogger()
+          logger.setLevel(logging.INFO)
+
           def lambda_handler(event, context):
-              client = boto3.client('glue')
-          
-              client.start_crawler(Name=event['crawler-name'])
+              s3 = boto3.resource('s3')
+
+              try:
+                  event_key = event['key']
+                  filename = os.path.basename(event_key)
+                  source_name = event_key.split("/")[0]
+                  table_name = event_key.split("/")[1]
+
+                  incoming_bucket = os.environ['INCOMINGBUCKETNAME']
+                  raw_bucket = os.environ['RAWBUCKETNAME']
+
+                  copy_source = {
+                      'Bucket': incoming_bucket,
+                      'Key': event_key
+                  }
+                  s3.meta.client.copy(copy_source, raw_bucket, filename)
+              except Exception as e:
+                  logger.error(f"Not able to copy {event_key} incoming file")
+                  s3.meta.client.copy({'Bucket': incoming_bucket, 'Key': event_key}, incoming_bucket, f'error/{event_key}')
+              finally:
+                  logger.error(f"Deleting {event_key}")
+                  s3.Object(incoming_bucket, event_key).delete()
+
+              return json.dumps({
+                  "sourceName": source_name,
+                  "tableName": table_name,
+                  "fileName": filename
+              })
       Handler: index.lambda_handler
-      Role: !GetAtt IngestionCrawlerTriggerLambdaExecutionRole.Arn
+      Environment:
+        Variables:
+          INCOMINGBUCKETNAME: !Ref IncomingBucketName
+          RAWBUCKETNAME: !Ref RawBucketName
+      Role: !GetAtt MoveDataToRawBucketLambdaExecutionRole.Arn
       Runtime: python3.8
       MemorySize: 256
       Timeout: 128
