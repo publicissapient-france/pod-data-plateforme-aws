@@ -9,11 +9,7 @@ Description: 'S3 bucket configuration Pod data-plateforme'
 Parameters:
   Environment:
     Description: Environment
-    Default: prod
-    Type: String
-
-  IngestionSFTriggerLambdaFunctionArn:
-    Description: Arn of the Lambda that triggers the ingestion pipeline state machine
+    Default: prd
     Type: String
 
 ###############################################################################
