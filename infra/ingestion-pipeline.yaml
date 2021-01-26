@@ -59,9 +59,9 @@ Resources:
                   "Parameters": {
                     "JobName": "${GlueDataIngestionJob}",
                     "Arguments": {
-                      "--rawBucketName.$": ['Fn::ImportValue': !Sub "${S3Stack}-raw"],
-                      "--preparedBucketName.$": ['Fn::ImportValue': !Sub "${S3Stack}-prepared"],
-                      "--schemaBucketName.$": ['Fn::ImportValue': !Sub "${S3Stack}-schema"],
+                      "--rawBucketName.$": "$.RawBucket",
+                      "--preparedBucketName.$": "$.PreparedBucket",
+                      "--schemaBucketName.$": "$.SchemaBucket",
                       "--sourceName.$": "$.sourceName",
                       "--tableName.$": "$.tableName"
                     }
@@ -72,6 +72,12 @@ Resources:
           }
         - MoveDataToRawBucketLambdaArn: !GetAtt MoveDataToRawBucketLambda.Arn
           GlueDataIngestionJob: !Ref GlueDataIngestionJob
+          RawBucket:
+            !Join ['', ['s3://',Fn::ImportValue: !Sub "${S3Stack}-raw"]]
+          PreparedBucket:
+            !Join ['', ['s3://',Fn::ImportValue: !Sub "${S3Stack}-prepared"]]
+          SchemaBucket:
+            !Join ['', ['s3://',Fn::ImportValue: !Sub "${S3Stack}-schema"]]
       RoleArn: !GetAtt IngestionStateMachineRole.Arn
       StateMachineName: IngestionStateMachine
       Tags:
@@ -154,11 +160,9 @@ Resources:
       Action: 'lambda:InvokeFunction'
       FunctionName: !Ref IngestionSFTriggerLambdaFunction
       Principal: s3.amazonaws.com
-      SourceArn: ['Fn::ImportValue': !Sub "${S3Stack}-raw"]
+      SourceArn: !Join  ['',['Fn::ImportValue': !Sub "${S3Stack}-raw-arn"]]
       SourceAccount: !Ref AWS::AccountId
-      Tags:
-        - Key: Description
-          Value: pod-dataplatform
+
 
   IngestionSFTriggerLambdaExecutionRole:
     Type: AWS::IAM::Role
@@ -258,9 +262,9 @@ Resources:
       }
       DefaultArguments: {
           "--job-language" : !Ref JobLanguage,
-          "--raw-bucket-name" : ['Fn::ImportValue': !Sub "${S3Stack}-raw"],
-          "--schema-bucket-name" :  ['Fn::ImportValue': !Sub "${S3Stack}-schema"],
-          "--prepared-bucket-name" : ['Fn::ImportValue': !Sub "${S3Stack}-prepared"],
+          "--raw-bucket-name" : !Join ['',['Fn::ImportValue': !Sub "${S3Stack}-raw",'']],
+          "--schema-bucket-name" :  !Join ['',['Fn::ImportValue': !Sub "${S3Stack}-schema",'']],
+          "--prepared-bucket-name" : !Join ['',['Fn::ImportValue': !Sub "${S3Stack}-prepared",'']],
       }
       MaxRetries: 0
       Description: "Process data ingestion for pod-data-platform-job."
@@ -356,8 +360,8 @@ Resources:
       Handler: index.lambda_handler
       Environment:
         Variables:
-          INCOMINGBUCKETNAME: ['Fn::ImportValue': !Sub "${S3Stack}-incoming"]
-          RAWBUCKETNAME: ['Fn::ImportValue': !Sub "${S3Stack}-raw"]
+          INCOMINGBUCKETNAME: !Join ['',['Fn::ImportValue': !Sub "${S3Stack}-incoming"]]
+          RAWBUCKETNAME: !Join ['',['Fn::ImportValue': !Sub "${S3Stack}-raw"]]
       Role: !GetAtt MoveDataToRawBucketLambdaExecutionRole.Arn
       Runtime: python3.8
       MemorySize: 256
