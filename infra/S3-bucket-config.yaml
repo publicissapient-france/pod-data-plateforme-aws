@@ -17,27 +17,6 @@ Parameters:
 ###############################################################################
 
 Resources:
-  Incoming:
-    Type: AWS::S3::Bucket
-    Properties:
-      BucketName: !Sub 'pod-dp-${Environment}-incoming'
-      BucketEncryption:
-        ServerSideEncryptionConfiguration:
-          - ServerSideEncryptionByDefault:
-              SSEAlgorithm: AES256
-      NotificationConfiguration:
-        LambdaConfigurations:
-          - Event: s3:ObjectCreated:*
-            Function: !Ref IngestionSFTriggerLambdaFunctionArn
-            Filter:
-              S3Key:
-                Rules:
-                - Name: suffix
-                  Value: .csv
-      Tags:
-        - Key: Description
-          Value: pod-dataplatform
-    DeletionPolicy: Retain
 
   Raw:
     Type: AWS::S3::Bucket
@@ -143,15 +122,3 @@ Outputs:
     Value: !GetAtt Schema.Arn
     Export:
       Name: !Sub "${AWS::StackName}-schema-arn"
-
-  IncomingBucket:
-    Description: Id of the Incomming bucket
-    Value: !Ref Incoming
-    Export:
-      Name: !Sub "${AWS::StackName}-incoming"
-
-  IncomingBucketArn:
-    Description: Id of the Incomming bucket
-    Value: !GetAtt Incoming.Arn
-    Export:
-      Name: !Sub "${AWS::StackName}-incoming-arn"
