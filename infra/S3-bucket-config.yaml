@@ -9,11 +9,7 @@ Description: 'S3 bucket configuration Pod data-plateforme'
 Parameters:
   Environment:
     Description: Environment
-    Default: prod
-    Type: String
-
-  IngestionSFTriggerLambdaFunctionArn:
-    Description: Arn of the Lambda that triggers the ingestion pipeline state machine
+    Default: prd
     Type: String
 
 ###############################################################################
@@ -21,27 +17,6 @@ Parameters:
 ###############################################################################
 
 Resources:
-  Incoming:
-    Type: AWS::S3::Bucket
-    Properties:
-      BucketName: !Sub 'pod-dp-${Environment}-incoming'
-      BucketEncryption:
-        ServerSideEncryptionConfiguration:
-          - ServerSideEncryptionByDefault:
-              SSEAlgorithm: AES256
-      NotificationConfiguration:
-        LambdaConfigurations:
-          - Event: s3:ObjectCreated:*
-            Function: !Ref IngestionSFTriggerLambdaFunctionArn
-            Filter:
-              S3Key:
-                Rules:
-                - Name: suffix
-                  Value: .csv
-      Tags:
-        - Key: Description
-          Value: pod-dataplatform
-    DeletionPolicy: Retain
 
   Raw:
     Type: AWS::S3::Bucket
@@ -86,6 +61,20 @@ Resources:
     Type: AWS::S3::Bucket
     Properties:
       BucketName: !Sub 'pod-dp-${Environment}-schema'
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      Tags:
+        - Key: Description
+          Value: pod-dataplatform
+    DeletionPolicy: Retain
+
+
+  Artifacts:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub 'pod-dp-${Environment}-artifacts'
       BucketEncryption:
         ServerSideEncryptionConfiguration:
           - ServerSideEncryptionByDefault:
@@ -148,14 +137,14 @@ Outputs:
     Export:
       Name: !Sub "${AWS::StackName}-schema-arn"
 
-  IncomingBucket:
-    Description: Id of the Incomming bucket
-    Value: !Ref Incoming
+  ArtifactsBucket:
+    Description: Id of the Schema bucket
+    Value: !Ref Artifacts
     Export:
-      Name: !Sub "${AWS::StackName}-incoming"
+      Name: !Sub "${AWS::StackName}-artifacts"
 
-  IncomingBucketArn:
-    Description: Id of the Incomming bucket
-    Value: !GetAtt Incoming.Arn
+  ArtifactsBucketArn:
+    Description: Arn of the Schema bucket
+    Value: !GetAtt Artifacts.Arn
     Export:
-      Name: !Sub "${AWS::StackName}-incoming-arn"
+      Name: !Sub "${AWS::StackName}-artifacts-arn"

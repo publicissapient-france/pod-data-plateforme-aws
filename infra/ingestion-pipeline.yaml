@@ -9,47 +9,19 @@ Description: 'Ingestion pipeline Pod data-platform'
 Parameters:
   Environment:
     Description: Environment
-    Default: prod
+    Default: prd
     Type: String
 
-  IncomingBucketName:
-    Description: Environment
-    Default: pod-dp-prod-incoming
-    Type: String
-    
-  RawBucketName:
-    Description: Environment
-    Default: pod-dp-prod-raw
-    Type: String
-  
-  SchemaBucketName:
-    Description: Environment
-    Default: pod-dp-prod-schema
+  S3Stack:
+    Description: stack resources S3
+    Default: pod-dp-s3
     Type: String
 
-  PreparedBucketName:
-    Description: Environment
-    Default: pod-dp-prod-prepared
-    Type: String
-  
-  ArtifactBucketName:
-    Description: Environment
-    Default: pod-dp-prod-incoming
-    Type: String
-
-   ETLScriptsPrefix:
+  ETLScriptsPrefix:
     Type: String
     MinLength: "1"
+    Default: "/"
     Description: "Location of the Glue job ETL scripts in S3."
-
-  ETLOutputPrefix:
-    Type: String
-    MinLength: "1"
-    Description: "Name of the S3 output path to which this CloudFormation template's AWS Glue jobs are going to write ETL output."
-
-  IngestionStateMachineArn:
-    Description: Arn of the ingestion pipeline state machine
-    Type: String
 
   JobLanguage:
     Type: String
@@ -57,11 +29,126 @@ Parameters:
     Default: "scala"
     Description: "Language of the ingestion AWS Glue Job."
 
+  ArtifactsBucket:
+    Type: String
+    Description: "Name of the bucket containing Glue scripts and Lambda"
+
+  IncomingBucketName:
+    Type: String
+    Default: "pod-dp-prd-incoming"
+    Description: "Name of the incoming bucket"
+
+
 ###############################################################################
 ### Resources
 ###############################################################################
 
 Resources:
+
+  Incoming:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Ref IncomingBucketName
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      NotificationConfiguration:
+        LambdaConfigurations:
+          - Event: s3:ObjectCreated:*
+            Function: !GetAtt IngestionSFTriggerLambdaFunction.Arn
+            Filter:
+              S3Key:
+                Rules:
+                  - Name: suffix
+                    Value: .csv
+      Tags:
+        - Key: Description
+          Value: pod-dataplatform
+    DeletionPolicy: Retain
+    DependsOn: IngestionSFTriggerLambdaPermission
+
+
+  IngestionStateMachine:
+    Type: AWS::StepFunctions::StateMachine
+    Properties:
+      DefinitionString:
+        !Sub
+        - |
+          {
+            "Comment": "State Machine to run ingestion pipeline",
+            "StartAt": "MoveDataToRawBucket",
+            "States": {
+              "MoveDataToRawBucket": {
+                  "Type": "Task",
+                  "Resource": "${MoveDataToRawBucketLambdaArn}",
+                  "Next": "GlueJob"
+              },
+              "GlueJob": {
+                  "Type": "Task",
+                  "Resource": "arn:aws:states:::glue:startJobRun.sync",
+                  "Parameters": {
+                    "JobName": "${GlueDataIngestionJob}",
+                    "Arguments": {
+                      "--rawBucketName.$": "$.RawBucket",
+                      "--preparedBucketName.$": "$.PreparedBucket",
+                      "--schemaBucketName.$": "$.SchemaBucket",
+                      "--sourceName.$": "$.sourceName",
+                      "--tableName.$": "$.tableName"
+                    }
+                  },
+                  "End": true
+                }
+            }
+          }
+        - MoveDataToRawBucketLambdaArn: !GetAtt MoveDataToRawBucketLambda.Arn
+          GlueDataIngestionJob: !Ref GlueDataIngestionJob
+          RawBucket:
+            !Join ['', ['s3://', 'Fn::ImportValue: !Sub "${S3Stack}-raw"']]
+          PreparedBucket:
+            !Join ['', ['s3://', 'Fn::ImportValue: !Sub "${S3Stack}-prepared"']]
+          SchemaBucket:
+            !Join ['', ['s3://', 'Fn::ImportValue: !Sub "${S3Stack}-schema"']]
+      RoleArn: !GetAtt IngestionStateMachineRole.Arn
+      StateMachineName: IngestionStateMachine
+      Tags:
+        - Key: Description
+          Value: pod-dataplatform
+
+  IngestionStateMachineRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: IngestionStateMachineRole
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service:
+              - states.amazonaws.com
+          Action:
+            - sts:AssumeRole
+      Policies:
+        - PolicyName: LambdaExecution
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+            - Effect: Allow
+              Action: lambda:InvokeFunction
+              Resource: "*"
+        - PolicyName: Glue
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+            - Effect: Allow
+              Action:
+                - "glue:StartJobRun"
+                - "glue:GetJobRun"
+                - "glue:GetJobRuns"
+                - "glue:BatchStopJobRun"
+              Resource: "*"
+      Path: "/"
+
   AWSGlueJobRole:
     Type: "AWS::IAM::Role"
     Properties:
@@ -86,29 +173,26 @@ Resources:
                   - "s3:ListBucket"
                   - "s3:DeleteObject"
                 Resource:
-                  - !Sub "arn:aws:s3:::${RawBucketName}"
-                  - !Sub "arn:aws:s3:::${RawBucketName}/*"
-                  - !Sub "arn:aws:s3:::${SchemaBucketName}"
-                  - !Sub "arn:aws:s3:::${SchemaBucketName}/*"
-                  - !Sub "arn:aws:s3:::${PreparedBucketName}"
-                  - !Sub "arn:aws:s3:::${PreparedBucketName}/*"
-                  - !Sub "arn:aws:s3:::${ArtifactBucketName}"
-                  - !Sub "arn:aws:s3:::${ArtifactBucketName}/*"
+                  - 'Fn::ImportValue': !Sub '${S3Stack}-raw-arn'
+                  - !Join ['', [ 'Fn::ImportValue': !Sub "${S3Stack}-raw-arn",'/*' ]]
+                  - 'Fn::ImportValue': !Sub "${S3Stack}-schema-arn"
+                  - !Join ['', [ 'Fn::ImportValue': !Sub "${S3Stack}-schema-arn",'/*' ]]
+                  - 'Fn::ImportValue': !Sub "${S3Stack}-prepared-arn"
+                  - !Join ['',[ 'Fn::ImportValue': !Sub "${S3Stack}-prepared-arn",'/*' ]]
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/service-role/AWSGlueServiceRole
       Path: "/"
-      
+
   IngestionSFTriggerLambdaPermission:
     Type: AWS::Lambda::Permission
     Properties:
       Action: 'lambda:InvokeFunction'
       FunctionName: !Ref IngestionSFTriggerLambdaFunction
       Principal: s3.amazonaws.com
+      # SourceArn: !Join  ['',['Fn::ImportValue': !Sub "${S3Stack}-incoming-arn"]]
       SourceArn: !Sub 'arn:aws:s3:::${IncomingBucketName}'
       SourceAccount: !Ref AWS::AccountId
-      Tags:
-        - Key: Description
-          Value: pod-dataplatform
+
 
   IngestionSFTriggerLambdaExecutionRole:
     Type: AWS::IAM::Role
@@ -140,7 +224,59 @@ Resources:
             - Effect: Allow
               Action:
               - states:StartExecution
-              Resource:  !Ref IngestionStateMachineArn
+              Resource:  !Ref IngestionStateMachine
+      Tags:
+        - Key: Description
+          Value: pod-dataplatform
+
+  MoveDataToRawBucketLambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service:
+            - lambda.amazonaws.com
+          Action:
+          - sts:AssumeRole
+      Policies:
+        - PolicyName: allowLogging
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+            - Effect: Allow
+              Action:
+              - logs:CreateLogGroup
+              - logs:CreateLogStream
+              - logs:PutLogEvents
+              Resource: '*'
+        - PolicyName: S3List
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+            - Effect: Allow
+              Action:
+              - s3:ListBucket
+              Resource:
+                  - !Sub arn:aws:s3:::${IncomingBucketName}
+                  - 'Fn::ImportValue': !Sub '${S3Stack}-raw-arn'
+        - PolicyName: S3Read
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+            - Effect: Allow
+              Action:
+                - "s3:GetObject"
+                - "s3:PutObject"
+                - "s3:DeleteObject"
+                - "s3:ListBucket"
+              Resource:
+                  - !Sub arn:aws:s3:::${IncomingBucketName}
+                  - !Join  ['',[ !Sub "arn:aws:s3:::${IncomingBucketName}",'/*' ]]
+                  - 'Fn::ImportValue': !Sub '${S3Stack}-raw-arn'
+                  - !Join ['', [ 'Fn::ImportValue': !Sub "${S3Stack}-raw-arn",'/*' ]]
       Tags:
         - Key: Description
           Value: pod-dataplatform
@@ -152,13 +288,13 @@ Resources:
       Name: "GlueDataIngestionJob"
       Command: {
         "Name" : "glueetl",
-        "ScriptLocation": !Sub "s3://${ArtifactBucketName}/${ETLScriptsPrefix}/process_data_ingestion.scala"
+        "ScriptLocation": !Join ['',[ 's3://', !Ref ArtifactsBucket, !Sub "/${ETLScriptsPrefix}/process_data_ingestion.scala" ]]
       }
       DefaultArguments: {
           "--job-language" : !Ref JobLanguage,
-          "--raw-bucket-name" : !Ref RawBucketName,
-          "--schema-bucket-name" : !Ref SchemaBucketName,
-          "--prepared-bucket-name" : !Ref PreparedBucketName
+          "--raw-bucket-name" : !Join ['',['Fn::ImportValue': !Sub "${S3Stack}-raw",'']],
+          "--schema-bucket-name" :  !Join ['',['Fn::ImportValue': !Sub "${S3Stack}-schema",'']],
+          "--prepared-bucket-name" : !Join ['',['Fn::ImportValue': !Sub "${S3Stack}-prepared",'']],
       }
       MaxRetries: 0
       Description: "Process data ingestion for pod-data-platform-job."
@@ -178,22 +314,88 @@ Resources:
           logger = logging.getLogger()
           logger.setLevel(logging.INFO)
 
-          def lambda_handler(event, context):
-              stepfunction = boto3.client('stepfunctions')
-              stateMachineArn = os.environ['STATEMACHINEARN']
-              input = json.dumps(event)
-              logger.info(f'Step Function trigger input: {input}')
 
-              response = stepfunction.start_execution(
-                stateMachineArn=stateMachineArn,
-                input=input
+          def lambda_handler(event, context):
+              sf_client = boto3.client('stepfunctions')
+              state_machine_arn = os.environ['STATEMACHINEARN']
+
+              event_key = event['Records'][0]['s3']['object']['key']
+
+
+              sm_input = json.dumps({
+                  "event_key": event_key
+              })
+              logger.info(f'Step Function trigger input: {sm_input}')
+
+              response = sf_client.start_execution(
+                  stateMachineArn=state_machine_arn,
+                  input=sm_input
               )
               logger.info(f'Step Function trigger response: {response}')
       Handler: index.lambda_handler
       Environment:
         Variables:
-          STATEMACHINEARN: !Ref IngestionStateMachineArn
+          STATEMACHINEARN: !Ref IngestionStateMachine
       Role: !GetAtt IngestionSFTriggerLambdaExecutionRole.Arn
+      Runtime: python3.8
+      MemorySize: 256
+      Timeout: 128
+      Tags:
+        - Key: Description
+          Value: pod-dataplatform
+
+  MoveDataToRawBucketLambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: MoveDataToRawBucketFunction
+      Code:
+        ZipFile: |
+          import os
+          import json
+          import logging
+          import boto3
+
+          logger = logging.getLogger()
+          logger.setLevel(logging.INFO)
+
+          def lambda_handler(event, context):
+              logger.info(f'Event: {event}')
+              s3 = boto3.resource('s3')
+
+              event_key = event['event_key']
+              filename = os.path.basename(event_key)
+              source_name = event_key.split("/")[0]
+              table_name = event_key.split("/")[1]
+
+              incoming_bucket = os.environ['INCOMINGBUCKETNAME']
+              raw_bucket = os.environ['RAWBUCKETNAME']
+
+              copy_source = {
+                  'Bucket': incoming_bucket,
+                  'Key': event_key
+              }
+
+              try:
+                  s3.meta.client.copy(copy_source, raw_bucket, event_key)
+              except Exception as e:
+                  logger.error(f"Not able to copy {event_key} incoming file. Cause: {e}")
+                  s3.meta.client.copy({'Bucket': incoming_bucket, 'Key': event_key}, incoming_bucket, f'error/{event_key}')
+              finally:
+                  logger.info(f"Deleting {event_key}")
+                  s3.Object(incoming_bucket, event_key).delete()
+
+              return json.dumps({
+                  "sourceName": source_name,
+                  "tableName": table_name,
+                  "fileName": filename
+          	})
+
+      Handler: index.lambda_handler
+      Environment:
+        Variables:
+          INCOMINGBUCKETNAME: !Ref IncomingBucketName
+          RAWBUCKETNAME: !Join ['',['Fn::ImportValue': !Sub "${S3Stack}-raw"]]
+      Role: !GetAtt MoveDataToRawBucketLambdaExecutionRole.Arn
       Runtime: python3.8
       MemorySize: 256
       Timeout: 128
@@ -209,3 +411,15 @@ Outputs:
   IngestionSFTriggerLambdaFunctionArn:
     Description: Arn of the Lambda that triggers the ingestion pipeline state machine
     Value: !GetAtt IngestionSFTriggerLambdaFunction.Arn
+
+  IncomingBucket:
+    Description: Id of the Incomming bucket
+    Value: !Ref Incoming
+    Export:
+      Name: !Sub "${AWS::StackName}-incoming"
+
+  IncomingBucketArn:
+    Description: Id of the Incomming bucket
+    Value: !GetAtt Incoming.Arn
+    Export:
+      Name: !Sub "${AWS::StackName}-incoming-arn"
