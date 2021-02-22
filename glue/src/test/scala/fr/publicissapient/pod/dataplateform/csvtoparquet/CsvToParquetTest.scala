@@ -11,12 +11,11 @@ object CsvToParquetTest extends App {
   val glueContext: GlueContext = new GlueContext(spark)
   val sparkSession: SparkSession = glueContext.getSparkSession
 
-  // val toto = getClass.getResource("")
+  val resource = getClass.getResource("") // TODO: make it work
 
   val csvToParquet = CsvToParquet("", "",
-    "Users/albanphelip/Documents/Xebia/DataPlateforme/pod-data-plateforme-aws/glue/src/test/resources", "my_source", "my_table",
+    resource, "my_source", "my_table",
     glueContext, "file://")
-
 
   private val schema: StructType = csvToParquet.getSchema
 
