@@ -70,6 +70,33 @@ Resources:
           Value: pod-dataplatform
     DeletionPolicy: Retain
 
+
+  Artifacts:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub 'pod-dp-${Environment}-artifacts'
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      Tags:
+        - Key: Description
+          Value: pod-dataplatform
+    DeletionPolicy: Retain
+
+  Toto:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub 'pod-dp-${Environment}-toto'
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      Tags:
+        - Key: Description
+          Value: pod-dataplatform
+    DeletionPolicy: Retain
+
 ###############################################################################
 ### Outputs
 ###############################################################################
@@ -122,3 +149,15 @@ Outputs:
     Value: !GetAtt Schema.Arn
     Export:
       Name: !Sub "${AWS::StackName}-schema-arn"
+
+  ArtifactsBucket:
+    Description: Id of the Schema bucket
+    Value: !Ref Artifacts
+    Export:
+      Name: !Sub "${AWS::StackName}-artifacts"
+
+  ArtifactsBucketArn:
+    Description: Arn of the Schema bucket
+    Value: !GetAtt Artifacts.Arn
+    Export:
+      Name: !Sub "${AWS::StackName}-artifacts-arn"

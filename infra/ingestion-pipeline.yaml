@@ -23,17 +23,15 @@ Parameters:
     Default: "/"
     Description: "Location of the Glue job ETL scripts in S3."
 
-  ETLOutputPrefix:
-    Type: String
-    MinLength: "1"
-    Default: "/"
-    Description: "Name of the S3 output path to which this CloudFormation template's AWS Glue jobs are going to write ETL output."
-
   JobLanguage:
     Type: String
     MinLength: "4"
     Default: "scala"
     Description: "Language of the ingestion AWS Glue Job."
+
+  ArtifactsBucket:
+    Type: String
+    Description: "Name of the bucket containing Glue scripts and Lambda"
 
   IncomingBucketName:
     Type: String
@@ -106,11 +104,11 @@ Resources:
         - MoveDataToRawBucketLambdaArn: !GetAtt MoveDataToRawBucketLambda.Arn
           GlueDataIngestionJob: !Ref GlueDataIngestionJob
           RawBucket:
-            !Join ['', ['s3://',Fn::ImportValue: !Sub "${S3Stack}-raw"]]
+            !Join ['', ['s3://', 'Fn::ImportValue: !Sub "${S3Stack}-raw"']]
           PreparedBucket:
-            !Join ['', ['s3://',Fn::ImportValue: !Sub "${S3Stack}-prepared"]]
+            !Join ['', ['s3://', 'Fn::ImportValue: !Sub "${S3Stack}-prepared"']]
           SchemaBucket:
-            !Join ['', ['s3://',Fn::ImportValue: !Sub "${S3Stack}-schema"]]
+            !Join ['', ['s3://', 'Fn::ImportValue: !Sub "${S3Stack}-schema"']]
       RoleArn: !GetAtt IngestionStateMachineRole.Arn
       StateMachineName: IngestionStateMachine
       Tags:
@@ -290,7 +288,7 @@ Resources:
       Name: "GlueDataIngestionJob"
       Command: {
         "Name" : "glueetl",
-        "ScriptLocation": !Join ['',[ 's3://',"bucket-to-create", !Sub "/${ETLScriptsPrefix}/process_data_ingestion.scala" ]]
+        "ScriptLocation": !Join ['',[ 's3://', !Ref ArtifactsBucket, !Sub "/${ETLScriptsPrefix}/process_data_ingestion.scala" ]]
       }
       DefaultArguments: {
           "--job-language" : !Ref JobLanguage,
