@@ -84,19 +84,6 @@ Resources:
           Value: pod-dataplatform
     DeletionPolicy: Retain
 
-  Toto:
-    Type: AWS::S3::Bucket
-    Properties:
-      BucketName: !Sub 'pod-dp-${Environment}-toto'
-      BucketEncryption:
-        ServerSideEncryptionConfiguration:
-          - ServerSideEncryptionByDefault:
-              SSEAlgorithm: AES256
-      Tags:
-        - Key: Description
-          Value: pod-dataplatform
-    DeletionPolicy: Retain
-
 ###############################################################################
 ### Outputs
 ###############################################################################
