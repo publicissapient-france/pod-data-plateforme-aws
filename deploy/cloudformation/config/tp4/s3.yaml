@@ -1,0 +1,8 @@
+stack_name: "{{ var.environment }}-dataplatform-s3-{{ var.Source }}"
+template_path: tp4/s3.yaml
+parameters:
+  Environment: {{ var.environment }}
+  BucketPrefix: "{{ var.trainee }}-source"
+  Source: "{{ var.Source }}"
+  KMSKeyArn: !stack_output_external {{ var.environment }}-dataplatform-kms::KMSKeyArn
+  LambdaLaunchIngestionWorkflowArn: !stack_output_external {{ var.environment }}-dataplatform-ingestion-workflow::LambdaLaunchStepFunctionsArn
